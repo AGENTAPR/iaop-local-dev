@@ -1,0 +1,28 @@
+name: Main CI
+
+# Validates the local dev stack definition. Runs ONLY on pushes to main.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: main-ci-${{ github.repository }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Compose config validation
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate docker compose file
+        run: docker compose -f docker-compose.yml config -q
+      - name: Validate keycloak realm JSON
+        run: python -c "import json; json.load(open('keycloak/iaop-realm.json'))"
+      - name: Validate initdb SQL present
+        run: test -f initdb/01-create-databases.sql

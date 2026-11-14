@@ -1,0 +1,79 @@
+# IAOP local development stack.
+# Brings up the platform dependencies every service needs locally.
+# Service binaries themselves run via `cargo run` (see each repo's README).
+#
+# Usage:
+#   docker compose up -d
+#   docker compose down          # stop
+#   docker compose down -v       # stop + wipe volumes (fresh DBs)
+
+name: iaop-local
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: iaop-postgres
+    environment:
+      POSTGRES_USER: iaop
+      POSTGRES_PASSWORD: iaop_dev_only
+      POSTGRES_DB: iaop
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iaop -d iaop"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: iaop-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin_dev_only
+      KC_HTTP_PORT: 8080
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+      - keycloak-data:/opt/keycloak/data
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo ok >&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  flowable:
+    image: flowable/flowable-rest:7.1.0
+    container_name: iaop-flowable
+    environment:
+      FLOWABLE_REST_APP_ADMIN_USER-PASSWORD: admin:test
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/flowable
+      SPRING_DATASOURCE_USERNAME: iaop
+      SPRING_DATASOURCE_PASSWORD: iaop_dev_only
+      SPRING_DATASOURCE_DRIVER-CLASS-NAME: org.postgresql.Driver
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.114.0
+    container_name: iaop-otel-collector
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ../iaop-observability/otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # Prometheus exporter
+    profiles: ["observability"]
+
+volumes:
+  postgres-data:
+  keycloak-data:
