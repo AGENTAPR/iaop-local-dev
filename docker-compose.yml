@@ -74,6 +74,22 @@ services:
       - "8889:8889"   # Prometheus exporter
     profiles: ["observability"]
 
+  api-docs:
+    image: ghcr.io/agentapr/iaop-developer-portal:latest
+    build:
+      context: ../iaop-api-contracts
+      dockerfile: portal/Dockerfile
+    container_name: iaop-api-docs
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+      CATALOG_PATH: /app/catalog/services.yaml
+      SPECS_DIR: /app/specs
+      ENVIRONMENT: development
+    ports:
+      - "8082:8080"
+    profiles: ["docs", "all"]
+
 volumes:
   postgres-data:
   keycloak-data:
